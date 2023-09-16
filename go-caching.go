@@ -22,10 +22,6 @@ type Items struct {
 }
 
 func (item Items) isExpired() bool {
-	if item.ExpirationTime == 0 {
-		return false
-	}
-
 	if item.ExpirationTime <= time.Now().UnixNano() && item.ExpirationTime > 0 {
 		return true
 	}
@@ -39,9 +35,9 @@ type Cache struct {
 	Expiration time.Duration
 }
 
-func (c *Cache) SetItem(k string, v any, ex time.Duration) {
+func (c *Cache) SetItem(k string, d any, ex time.Duration) {
 	c.mu.Lock() // Ensure no one causes a race condition
-
+	defer c.mu.Unlock()
 	var newExpireTime int64
 	
 	if ex == DefaultExpiration {
@@ -53,35 +49,51 @@ func (c *Cache) SetItem(k string, v any, ex time.Duration) {
 	}
 
 	c.items[k] = Items{
-		Value: v,
+		Value: d,
 		ExpirationTime: newExpireTime, 
 	}
-
-	c.mu.Unlock()
 }
 
 func (c *Cache) GetItem(k string) {
 	c.mu.Lock()
-	
+	defer c.mu.Unlock()
 	fmt.Println(c.items[k])
-	c.mu.Unlock()
 }
 
-func (c *Cache) DeleteItem(k string) bool{
+func (c *Cache) DeleteItem(k string) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	_, exists := c.items[k]
 	if !exists {
 		fmt.Println("Error, item does not exist and cannot be deleted.")
 	}
 
 	delete(c.items, k)
-	c.mu.Unlock()
+}
+
+func (c *Cache) UpdateItem(k string, d any, ex time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.CheckExists(k) {
+		c.setItem(k, d, ex)
+	} else {
+		fmt.Println("Key does not exist so unable to update item.")
+	}
+}
+
+func (c *Cache) CheckExists(k string) bool {
+	_, exists := c.items[k]
+	if !exists {
+		fmt.Println("Error: Key doesn't exist.")
+		return false
+	}
+
 	return true
 }
 
 /* Below is non-exported functions used to create the same functionality while there are mutex locks to avoid deadlock. */
 
-/*func (c *Cache) setItem(k string, v any, ex time.Duration) bool {
+func (c *Cache) setItem(k string, d any, ex time.Duration) bool {
 	var newExpireTime int64
 	
 	if ex == DefaultExpiration {
@@ -93,14 +105,14 @@ func (c *Cache) DeleteItem(k string) bool{
 	}
 
 	c.items[k] = Items{
-		Value: v,
+		Value: d,
 		ExpirationTime: newExpireTime, 
 	}
 
 	return true
 }
 
-func (c *Cache) retrieveItem(k string) {
+/*func (c *Cache) retrieveItem(k string) {
 	fmt.Println(c.items[k])
 }*/
 
@@ -167,6 +179,7 @@ func main() {
 	cache.GetItem("test")
 	cache.GetItem("test2")
 	cache.GetItem("test5")
+	cache.UpdateItem("test1034234", 234123324, NoExpireTime)
 
 	for {
 		select {
